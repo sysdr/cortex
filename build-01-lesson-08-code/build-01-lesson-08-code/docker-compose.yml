@@ -1,0 +1,45 @@
+# Cortex — Build 01, Lesson 07
+# Everything done by hand since Lesson 05 — install Postgres, set a
+# password, create a database — becomes this file. `docker compose up`
+# from a fresh clone gets you a running Cortex with zero local installs.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cortex
+    ports:
+      - "5432:5432"
+    volumes:
+      - cortex_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # The api service waits on this, not just on Postgres accepting a
+      # TCP connection — a container can be "up" and still not ready to
+      # take real queries for the first second or two.
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    environment:
+      CORTEX_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/cortex
+      CORTEX_DATA_DIR: /app/data/documents
+    ports:
+      # Host port is configurable — WSL2 + Docker Desktop often cannot bind
+      # 8000 because Windows reserves TCP 7964–8063 (Hyper-V port exclusions).
+      - "${CORTEX_HOST_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Lesson 03's seed.sh still runs on the host — this volume is what
+      # lets its output reach the container without baking sample data
+      # into the image itself.
+      - ./data:/app/data
+
+volumes:
+  cortex_pgdata:
